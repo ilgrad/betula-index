@@ -52,6 +52,22 @@ d.id_unchecked("POST")       # fastest lookup for a known-closed vocabulary
 
 No runtime dependencies; a single abi3 wheel covers CPython 3.11+.
 
+### Pairs with betula-cluster
+
+`lexindex` owns the `string id ↔ dense id` mapping; [`betula-cluster`](https://github.com/ilgrad/betula-cluster)
+clusters the numeric rows. Use the lexindex dense id as the embedding-matrix row index and you can go
+both ways — `string id → cluster` and `cluster → string ids`:
+
+```python
+idx = PerfectHashIndex(doc_ids)                  # string id <-> dense [0, n) id
+matrix[idx.id(doc_id)] = embedding[doc_id]       # row index == lexindex id
+labels = betula_cluster.fit_predict(matrix, n_clusters=k)
+cluster = labels[idx.id("doc-00042")]            # string id -> cluster
+members = [idx.key(int(r)) for r in (labels == cluster).nonzero()[0]]  # cluster -> string ids
+```
+
+Runnable: [`examples/bridge_clustering.py`](https://github.com/ilgrad/lexindex/blob/main/examples/bridge_clustering.py).
+
 ## Rust
 
 ```toml
