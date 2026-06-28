@@ -1,14 +1,15 @@
-# betula-index
+# lexindex
 
-[![PyPI](https://img.shields.io/pypi/v/betula-index)](https://pypi.org/project/betula-index/)
-[![Python](https://img.shields.io/pypi/pyversions/betula-index)](https://pypi.org/project/betula-index/)
-[![CI](https://github.com/ilgrad/betula-index/actions/workflows/ci.yml/badge.svg)](https://github.com/ilgrad/betula-index/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ilgrad/betula-index/blob/main/LICENSE)
-[![Rust core · PyO3](https://img.shields.io/badge/Rust%20core-PyO3-orange.svg)](https://github.com/ilgrad/betula-index)
+[![PyPI](https://img.shields.io/pypi/v/lexindex)](https://pypi.org/project/lexindex/)
+[![Python](https://img.shields.io/pypi/pyversions/lexindex)](https://pypi.org/project/lexindex/)
+[![CI](https://github.com/ilgrad/lexindex/actions/workflows/ci.yml/badge.svg)](https://github.com/ilgrad/lexindex/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/ilgrad/lexindex/blob/main/LICENSE)
+[![Rust core · PyO3](https://img.shields.io/badge/Rust%20core-PyO3-orange.svg)](https://github.com/ilgrad/lexindex)
 
-Compact, immutable **string↔id indexes for huge catalogs** — the indexing companion to
-[`betula-cluster`](https://github.com/ilgrad/betula-cluster). Build once over a set of strings
-(entity names, cluster labels, document keys, vocabulary terms); query many times.
+Compact, immutable **string↔id indexes for huge catalogs**, with a Rust core and Python bindings.
+Build once over a set of strings (entity names, document keys, vocabulary terms, cluster labels);
+query many times. Pairs naturally with [`betula-cluster`](https://github.com/ilgrad/betula-cluster) —
+map string ids to cluster ids and back — but stands on its own.
 
 Two complementary, build-once / query-many structures:
 
@@ -26,16 +27,16 @@ Two complementary, build-once / query-many structures:
 
 Both assign dense ids in `[0, n)`, support reverse lookup, and **serialise to a flat blob**
 (`save`/`load`) — build once, persist, then `load`/mmap and query many times. Both are immutable after
-building, like the clustering features in `betula-cluster`.
+building.
 
 ## Python
 
 ```bash
-pip install betula-index
+pip install lexindex
 ```
 
 ```python
-from betula_index import PerfectHashIndex, StringIndex
+from lexindex import PerfectHashIndex, StringIndex
 
 idx = StringIndex(["apple", "apricot", "banana", "cherry"])
 idx.id("banana")             # 2  (sorted rank)
@@ -55,15 +56,15 @@ No runtime dependencies; a single abi3 wheel covers CPython 3.11+.
 
 ```toml
 [dependencies]
-betula-index = { git = "https://github.com/ilgrad/betula-index" }
+lexindex = { git = "https://github.com/ilgrad/lexindex" }
 # fst-only (drop the ptr_hash dependency):
-# betula-index = { git = "...", default-features = false }
+# lexindex = { git = "...", default-features = false }
 ```
 
 ## Usage
 
 ```rust
-use betula_index::StringIndex;
+use lexindex::StringIndex;
 
 let idx = StringIndex::build(["apple", "apricot", "banana", "cherry"])?;
 
@@ -84,11 +85,11 @@ assert_eq!(sub, ["apple", "apricot"]);
 // serialise to a flat blob and reload (e.g. mmap the file, then `from_bytes`)
 idx.save("catalog.bix")?;
 let idx = StringIndex::load("catalog.bix")?;
-# Ok::<(), betula_index::IndexError>(())
+# Ok::<(), lexindex::IndexError>(())
 ```
 
 ```rust
-use betula_index::PerfectHashIndex;            // requires the default `mph` feature
+use lexindex::PerfectHashIndex;            // requires the default `mph` feature
 
 let dict = PerfectHashIndex::build(["GET", "POST", "PUT", "DELETE"])?;
 let id = dict.id("POST").unwrap();             // fastest exact lookup, dense id in [0, n)
@@ -99,7 +100,7 @@ assert_eq!(dict.id("PATCH"), None);            // membership is verified, not ju
 dict.save("verbs.bmp")?;
 let dict = PerfectHashIndex::load("verbs.bmp")?;
 assert_eq!(dict.id("POST"), Some(id));
-# Ok::<(), betula_index::IndexError>(())
+# Ok::<(), lexindex::IndexError>(())
 ```
 
 ## Design notes
@@ -127,10 +128,10 @@ machine-dependent; the **ratios** and the trade-off are the point.
 
 | structure | build | lookup | serialised |
 |---|---|---|---|
-| betula `PerfectHashIndex::id_unchecked` | ~310 ms | **~232 ns** | 27 B/key |
+| lexindex `PerfectHashIndex::id_unchecked` | ~310 ms | **~232 ns** | 27 B/key |
 | `std::HashMap<String, u32>` | ~205 ms | ~290 ns | — (in-RAM, not serialisable) |
-| betula `PerfectHashIndex::id` (verified) | ~376 ms | ~377 ns | 27 B/key |
-| betula `StringIndex` (FST) | ~138 ms | ~386 ns | 27 B/key |
+| lexindex `PerfectHashIndex::id` (verified) | ~376 ms | ~377 ns | 27 B/key |
+| lexindex `StringIndex` (FST) | ~138 ms | ~386 ns | 27 B/key |
 | `std::BTreeMap<String, u32>` | ~39 ms | ~833 ns | — (in-RAM) |
 
 **Honest reading:** for a **fixed / closed vocabulary**, `PerfectHashIndex::id_unchecked` is the

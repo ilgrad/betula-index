@@ -1,4 +1,4 @@
-//! PyO3 bindings: expose [`StringIndex`] and [`PerfectHashIndex`] to Python as `betula_index._core`.
+//! PyO3 bindings: expose [`StringIndex`] and [`PerfectHashIndex`] to Python as `lexindex._core`.
 //!
 //! Thin wrappers over the Rust types — every method delegates to the core and maps [`IndexError`] to a
 //! Python exception. Built as an abi3 extension (CPython ≥ 3.11) under the `python` feature.
@@ -19,7 +19,7 @@ fn to_py(e: IndexError) -> PyErr {
 }
 
 /// Ordered string↔id index (FST) with prefix / range / fuzzy / subsequence queries.
-#[pyclass(name = "StringIndex", module = "betula_index._core", frozen)]
+#[pyclass(name = "StringIndex", module = "lexindex._core", frozen)]
 pub struct PyStringIndex {
     inner: StringIndex,
 }
@@ -110,7 +110,7 @@ impl PyStringIndex {
 
 /// Minimal-perfect-hash dictionary: fastest exact `string → dense id`, with persistence.
 #[cfg(feature = "mph")]
-#[pyclass(name = "PerfectHashIndex", module = "betula_index._core", frozen)]
+#[pyclass(name = "PerfectHashIndex", module = "lexindex._core", frozen)]
 pub struct PyPerfectHashIndex {
     inner: PerfectHashIndex,
 }

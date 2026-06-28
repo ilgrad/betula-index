@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let idx = sample();
-        let path = std::env::temp_dir().join(format!("betula_index_{}.bix", std::process::id()));
+        let path = std::env::temp_dir().join(format!("lexindex_{}.bix", std::process::id()));
         idx.save(&path).unwrap();
         let loaded = StringIndex::load(&path).unwrap();
         assert_eq!(loaded.id("banana"), Some(2));

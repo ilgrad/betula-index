@@ -1,6 +1,6 @@
-//! End-to-end tests of the public `betula-index` API.
+//! End-to-end tests of the public `lexindex` API.
 
-use betula_index::StringIndex;
+use lexindex::StringIndex;
 
 fn catalog() -> Vec<String> {
     (0..2_000).map(|i| format!("entity-{i:05}")).collect()
@@ -33,7 +33,7 @@ fn string_index_round_trips_a_catalog() {
 #[cfg(feature = "mph")]
 #[test]
 fn perfect_hash_index_is_a_fast_dictionary() {
-    use betula_index::PerfectHashIndex;
+    use lexindex::PerfectHashIndex;
     let names = catalog();
     let idx = PerfectHashIndex::build(&names).unwrap();
     assert_eq!(idx.len(), names.len());

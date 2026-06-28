@@ -1,4 +1,4 @@
-"""Type stubs for betula-index."""
+"""Type stubs for lexindex."""
 
 from typing import final
 

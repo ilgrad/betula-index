@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let idx = PerfectHashIndex::build(["GET", "POST", "PUT", "DELETE"]).unwrap();
-        let path = std::env::temp_dir().join(format!("betula_mph_{}.bmp", std::process::id()));
+        let path = std::env::temp_dir().join(format!("lexindex_mph_{}.bmp", std::process::id()));
         idx.save(&path).unwrap();
         let loaded = PerfectHashIndex::load(&path).unwrap();
         for w in ["GET", "POST", "PUT", "DELETE"] {

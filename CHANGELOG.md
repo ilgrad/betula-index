@@ -19,7 +19,7 @@ companion to `betula-cluster`.
   a faster `id_unchecked` for closed vocabularies (~1.25× faster than `std::HashMap` on point lookup),
   reverse lookup, and persistence (`save` / `load`) via `epserde`, keyed on a version-stable hash
   (FNV-1a + splitmix64) so a serialised MPH reloads and queries identically on any build.
-- **Python bindings** (PyO3 abi3 extension, CPython 3.11+): `pip install betula-index`, zero runtime
+- **Python bindings** (PyO3 abi3 extension, CPython 3.11+): `pip install lexindex`, zero runtime
   dependencies, typed (`py.typed` + stubs).
 - **Feature gating** — `mph` (default) provides `PerfectHashIndex` (pulls `ptr_hash` + `epserde`);
   `--no-default-features` is an `fst`-only build, free of the informational RustSec advisories on the

@@ -1,11 +1,11 @@
-//! Build / query / size comparison of `betula-index` against the `std` maps it competes with.
+//! Build / query / size comparison of `lexindex` against the `std` maps it competes with.
 //!
 //! Run with `cargo run --release --example bench` (release matters — `lto` + `opt-level=3`). Numbers
 //! are illustrative and machine-dependent; the *ratios* are the point. No external dependencies: a
 //! deterministic stride walks the keys in a non-sequential order so lookups are not pure cache hits,
 //! and a checksum is printed so the optimiser cannot elide the queries.
 
-use betula_index::{PerfectHashIndex, StringIndex};
+use lexindex::{PerfectHashIndex, StringIndex};
 use std::collections::{BTreeMap, HashMap};
 use std::time::Instant;
 
@@ -39,18 +39,18 @@ fn main() {
     let probe: Vec<usize> = (0..n).map(|i| (i.wrapping_mul(STEP)) % n).collect();
 
     println!(
-        "betula-index bench — n = {n} keys (len {} each)\n",
+        "lexindex bench — n = {n} keys (len {} each)\n",
         keys[0].len()
     );
 
     bench(
-        "betula StringIndex (FST)",
+        "lexindex StringIndex (FST)",
         n,
         || StringIndex::build(&keys).unwrap(),
         |idx| probe.iter().map(|&i| idx.id(&keys[i]).unwrap_or(0)).sum(),
     );
     bench(
-        "betula PerfectHashIndex",
+        "lexindex PerfectHashIndex",
         n,
         || PerfectHashIndex::build(&keys).unwrap(),
         |idx| {
@@ -61,7 +61,7 @@ fn main() {
         },
     );
     bench(
-        "betula PHIndex unchecked",
+        "lexindex PHIndex unchecked",
         n,
         || PerfectHashIndex::build(&keys).unwrap(),
         |idx| {
@@ -110,11 +110,11 @@ fn main() {
     let raw = keys.iter().map(|k| k.len()).sum::<usize>();
     println!("\nserialised size (bytes/key):");
     println!(
-        "  betula StringIndex blob   {:6.2}",
+        "  lexindex StringIndex blob   {:6.2}",
         si.to_bytes().len() as f64 / n as f64
     );
     println!(
-        "  betula PerfectHashIndex   {:6.2}",
+        "  lexindex PerfectHashIndex   {:6.2}",
         ph.to_bytes().unwrap().len() as f64 / n as f64
     );
     println!("  raw key bytes (no index)  {:6.2}", raw as f64 / n as f64);

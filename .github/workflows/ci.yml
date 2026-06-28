@@ -91,4 +91,4 @@ jobs:
         run: |
           wheel=$(ls dist/*.whl | head -1)
           uv run --python ${{ matrix.python-version }} --with mypy --with "$wheel" \
-            python -m mypy.stubtest betula_index
+            python -m mypy.stubtest lexindex

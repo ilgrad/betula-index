@@ -1,4 +1,4 @@
-//! betula-index: compact, immutable string↔id indexes for huge catalogs.
+//! lexindex: compact, immutable string↔id indexes for huge catalogs.
 //!
 //! Two complementary, build-once / query-many indexes over a set of strings (entity names, cluster
 //! labels, document keys, vocabulary terms):
@@ -15,7 +15,7 @@
 //! they are immutable summaries, like the clustering features in the companion `betula-cluster` crate.
 //!
 //! ```
-//! use betula_index::StringIndex;
+//! use lexindex::StringIndex;
 //! let idx = StringIndex::build(["apple", "apricot", "banana"]).unwrap();
 //! assert_eq!(idx.id("banana"), Some(2));
 //! assert_eq!(idx.key(0), Some("apple"));

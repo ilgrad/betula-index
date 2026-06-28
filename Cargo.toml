@@ -1,17 +1,17 @@
 [package]
-name = "betula-index"
+name = "lexindex"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 description = "Compact, immutable string↔id indexes for huge catalogs: ordered FST lookup with prefix/range queries, plus a minimal-perfect-hash dictionary."
 authors = ["Ilia Gradina <ilia.gradina@gmail.com>"]
-repository = "https://github.com/ilgrad/betula-index"
+repository = "https://github.com/ilgrad/lexindex"
 readme = "README.md"
 keywords = ["index", "fst", "perfect-hash", "prefix", "catalog"]
 categories = ["data-structures", "text-processing"]
 
 [lib]
-name = "betula_index"
+name = "lexindex"
 # `cdylib` for the Python extension module (maturin/PyO3); `rlib` for use as a normal Rust crate.
 crate-type = ["cdylib", "rlib"]
 
