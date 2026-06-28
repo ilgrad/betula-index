@@ -90,6 +90,25 @@ assert_eq!(dict.id("POST"), Some(id));
   advisories (unmaintained / unsound) on transitive crates — `cargo audit` reports them as warnings,
   not vulnerabilities. The `fst`-only build is free of them.
 
+## Benchmarks
+
+`cargo run --release --example bench` (1 M keys, 19 bytes each). Absolute numbers are
+machine-dependent; the **ratios** and the trade-off are the point.
+
+| structure | build | lookup | serialised |
+|---|---|---|---|
+| betula `StringIndex` (FST) | ~150 ms | ~390 ns | **27 B/key** |
+| betula `PerfectHashIndex` | ~350 ms | ~360 ns | **27 B/key** |
+| `std::HashMap<String, u32>` | ~200 ms | **~270 ns** | — (in-RAM, not serialisable) |
+| `std::BTreeMap<String, u32>` | ~22 ms | ~710 ns | — (in-RAM) |
+
+**Honest reading:** for *pure in-RAM exact lookup*, `HashMap` is fastest (~1.4×) — betula-index does
+**not** beat it on point-lookup latency, and you should use `HashMap` when that is all you need. The
+win is elsewhere: betula's indexes are **compact and serialisable / mmap-able** (one ~27 B/key blob
+covers *both* `string→id` and `id→string`; `save` it and `load`/mmap instead of rebuilding), and they
+answer **ordered, prefix, range, and fuzzy** queries the hash maps cannot. Reach for betula-index when
+the catalog is large, persisted, or queried by prefix / edit distance.
+
 ## License
 
 MIT © Ilia Gradina
