@@ -6,7 +6,7 @@
 
 use crate::arena::StringArena;
 use crate::IndexError;
-use fst::automaton::{Automaton, Str};
+use fst::automaton::{Automaton, Levenshtein, Str, Subsequence};
 use fst::{IntoStreamer, Map, MapBuilder, Streamer};
 
 const MAGIC: &[u8; 4] = b"BIX1";
@@ -81,6 +81,33 @@ impl StringIndex {
     pub fn range(&self, lo: &str, hi: &str) -> Vec<(String, u64)> {
         let mut out = Vec::new();
         let mut stream = self.map.range().ge(lo).lt(hi).into_stream();
+        while let Some((k, v)) = stream.next() {
+            out.push((String::from_utf8_lossy(k).into_owned(), v));
+        }
+        out
+    }
+
+    /// All `(key, id)` pairs within Levenshtein edit distance `max_distance` of `query`, in
+    /// lexicographic order — typo-tolerant lookup / fuzzy autocomplete. The whole FST is walked by the
+    /// edit-distance automaton (no full scan of the key set). Returns [`IndexError::Automaton`] if the
+    /// automaton for this `query` and `max_distance` would be too large (lower `max_distance`).
+    pub fn fuzzy(&self, query: &str, max_distance: u32) -> Result<Vec<(String, u64)>, IndexError> {
+        let lev = Levenshtein::new(query, max_distance)
+            .map_err(|e| IndexError::Automaton(e.to_string()))?;
+        let mut out = Vec::new();
+        let mut stream = self.map.search(&lev).into_stream();
+        while let Some((k, v)) = stream.next() {
+            out.push((String::from_utf8_lossy(k).into_owned(), v));
+        }
+        Ok(out)
+    }
+
+    /// All `(key, id)` pairs whose key contains `query` as a subsequence — its characters appear in
+    /// order but not necessarily contiguously (e.g. `"ace"` matches `"abcde"`) — in lexicographic
+    /// order. Useful for fuzzy/abbreviation matching.
+    pub fn subsequence(&self, query: &str) -> Vec<(String, u64)> {
+        let mut out = Vec::new();
+        let mut stream = self.map.search(Subsequence::new(query)).into_stream();
         while let Some((k, v)) = stream.next() {
             out.push((String::from_utf8_lossy(k).into_owned(), v));
         }
@@ -162,6 +189,42 @@ mod tests {
             .map(|(k, _)| k)
             .collect();
         assert_eq!(r, vec!["apricot", "banana"]); // [lo, hi)
+    }
+
+    #[test]
+    fn fuzzy_search_tolerates_typos() {
+        let idx = sample(); // apple, apricot, banana, cherry
+                            // one insertion away from "apple"
+        let near: Vec<String> = idx
+            .fuzzy("aple", 1)
+            .unwrap()
+            .into_iter()
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(near, vec!["apple"]);
+        // one deletion away from "apricot"
+        assert!(idx
+            .fuzzy("aprcot", 2)
+            .unwrap()
+            .iter()
+            .any(|(k, _)| k == "apricot"));
+        // distance 0 is exact: a non-key returns nothing, a key returns itself with its id
+        assert!(idx.fuzzy("zzz", 0).unwrap().is_empty());
+        assert_eq!(
+            idx.fuzzy("banana", 0).unwrap(),
+            vec![("banana".to_string(), 2)]
+        );
+    }
+
+    #[test]
+    fn subsequence_matches_non_contiguous() {
+        let idx = sample();
+        // "ap" is an (in-order) subsequence of apple and apricot only
+        let ap: Vec<String> = idx.subsequence("ap").into_iter().map(|(k, _)| k).collect();
+        assert_eq!(ap, vec!["apple", "apricot"]);
+        // "ae" matches apple (a…e) but not apricot (no trailing e)
+        let ae: Vec<String> = idx.subsequence("ae").into_iter().map(|(k, _)| k).collect();
+        assert_eq!(ae, vec!["apple"]);
     }
 
     #[test]

@@ -7,9 +7,11 @@ Compact, immutable **string↔id indexes for huge catalogs** — the indexing co
 Two complementary, build-once / query-many structures:
 
 - **`StringIndex`** — an **ordered** index backed by a finite-state transducer
-  ([`fst`](https://crates.io/crates/fst)). Exact `string → id` and `id → string`, plus **prefix** and
-  **range** iteration, in a compressed, serialisable (and memory-mappable-by-blob) form. Use it for
-  autocomplete, browse, and ordered scans of a large catalog.
+  ([`fst`](https://crates.io/crates/fst)). Exact `string → id` and `id → string`, plus **prefix**,
+  **range**, **fuzzy** (bounded Levenshtein edit distance), and **subsequence** iteration — all driven
+  by automata over the FST, never a full scan — in a compressed, serialisable (and
+  memory-mappable-by-blob) form. Use it for autocomplete, typo-tolerant search, browse, and ordered
+  scans of a large catalog.
 - **`PerfectHashIndex`** — a **minimal-perfect-hash** dictionary backed by
   [`ptr_hash`](https://crates.io/crates/ptr_hash) (the `mph` feature, on by default). Fastest exact
   `string → dense id` lookup with **verified membership** and reverse lookup; no ordering. Use it as a
@@ -41,6 +43,12 @@ assert!(idx.contains("cherry"));
 // prefix / range iteration, lexicographically ordered
 let fruit: Vec<_> = idx.prefix("ap").into_iter().map(|(k, _)| k).collect();
 assert_eq!(fruit, ["apple", "apricot"]);
+
+// typo-tolerant fuzzy lookup (Levenshtein edit distance ≤ 1) and subsequence match
+let near: Vec<_> = idx.fuzzy("aple", 1)?.into_iter().map(|(k, _)| k).collect();
+assert_eq!(near, ["apple"]);
+let sub: Vec<_> = idx.subsequence("ap").into_iter().map(|(k, _)| k).collect();
+assert_eq!(sub, ["apple", "apricot"]);
 
 // serialise to a flat blob and reload (e.g. mmap the file, then `from_bytes`)
 idx.save("catalog.bix")?;

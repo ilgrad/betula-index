@@ -4,8 +4,9 @@
 //! labels, document keys, vocabulary terms):
 //!
 //! - [`StringIndex`] — an **ordered** index backed by a finite-state transducer ([`fst`]). Exact
-//!   `string → id` and `id → string`, plus **prefix** and **range** iteration, in a compressed,
-//!   serialisable form. Use it for autocomplete / browse / ordered scans of a large catalog.
+//!   `string → id` and `id → string`, plus **prefix**, **range**, **fuzzy** (Levenshtein), and
+//!   **subsequence** iteration (automaton-driven, no full scan), in a compressed, serialisable form.
+//!   Use it for autocomplete / typo-tolerant search / browse / ordered scans of a large catalog.
 //! - [`PerfectHashIndex`] — a **minimal-perfect-hash** dictionary backed by [`ptr_hash`] (the `mph`
 //!   feature, on by default). Fastest exact `string → dense id` lookup with verified membership; no
 //!   ordering. Use it as a fixed-vocabulary token↔id map on a hot path.
@@ -42,6 +43,9 @@ pub enum IndexError {
     Io(std::io::Error),
     /// A malformed serialised buffer (bad magic, version, length, or offsets).
     Format(&'static str),
+    /// A fuzzy/automaton query could not be compiled (e.g. the Levenshtein automaton for the given
+    /// query and edit distance would be too large).
+    Automaton(String),
 }
 
 impl fmt::Display for IndexError {
@@ -50,6 +54,7 @@ impl fmt::Display for IndexError {
             IndexError::Fst(e) => write!(f, "fst error: {e}"),
             IndexError::Io(e) => write!(f, "io error: {e}"),
             IndexError::Format(m) => write!(f, "format error: {m}"),
+            IndexError::Automaton(m) => write!(f, "automaton error: {m}"),
         }
     }
 }
@@ -59,7 +64,7 @@ impl std::error::Error for IndexError {
         match self {
             IndexError::Fst(e) => Some(e),
             IndexError::Io(e) => Some(e),
-            IndexError::Format(_) => None,
+            IndexError::Format(_) | IndexError::Automaton(_) => None,
         }
     }
 }
