@@ -6,8 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [0.1.0] — 2026-06-28
 
-First public release — compact, immutable string<->id indexes for huge catalogs; the indexing
-companion to `betula-cluster`.
+First public release — compact, immutable string<->id indexes for huge catalogs; a standalone Rust +
+Python library that also pairs with `betula-cluster` (map string ids to cluster ids and back).
 
 ### Added
 
