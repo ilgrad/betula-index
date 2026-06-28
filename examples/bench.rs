@@ -14,12 +14,17 @@ fn bench<T>(label: &str, n: usize, build: impl FnOnce() -> T, query: impl Fn(&T)
     let s = build();
     let build_ms = t0.elapsed().as_secs_f64() * 1e3;
 
-    // Two passes: warm, then timed; report ns per lookup.
-    let _ = query(&s);
-    let t1 = Instant::now();
-    let checksum = query(&s);
-    let per = t1.elapsed().as_secs_f64() * 1e9 / n as f64;
-    println!("{label:24} build {build_ms:8.1} ms   lookup {per:6.1} ns/op   (checksum {checksum})");
+    // Warm once, then take the min of several timed passes (least-noisy estimate of ns per lookup).
+    let mut checksum = query(&s);
+    let mut best = f64::INFINITY;
+    for _ in 0..5 {
+        let t1 = Instant::now();
+        checksum = query(&s);
+        best = best.min(t1.elapsed().as_secs_f64() * 1e9 / n as f64);
+    }
+    println!(
+        "{label:24} build {build_ms:8.1} ms   lookup {best:6.1} ns/op   (checksum {checksum})"
+    );
 }
 
 fn main() {
@@ -52,6 +57,17 @@ fn main() {
             probe
                 .iter()
                 .map(|&i| idx.id(&keys[i]).map_or(0, u64::from))
+                .sum()
+        },
+    );
+    bench(
+        "betula PHIndex unchecked",
+        n,
+        || PerfectHashIndex::build(&keys).unwrap(),
+        |idx| {
+            probe
+                .iter()
+                .map(|&i| u64::from(idx.id_unchecked(&keys[i])))
                 .sum()
         },
     );

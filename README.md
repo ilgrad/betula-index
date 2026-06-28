@@ -13,9 +13,10 @@ Two complementary, build-once / query-many structures:
   memory-mappable-by-blob) form. Use it for autocomplete, typo-tolerant search, browse, and ordered
   scans of a large catalog.
 - **`PerfectHashIndex`** — a **minimal-perfect-hash** dictionary backed by
-  [`ptr_hash`](https://crates.io/crates/ptr_hash) (the `mph` feature, on by default). Fastest exact
-  `string → dense id` lookup with **verified membership** and reverse lookup; no ordering. Use it as a
-  fixed-vocabulary token↔id map on a hot path.
+  [`ptr_hash`](https://crates.io/crates/ptr_hash) (the `mph` feature, on by default). Exact
+  `string → dense id` with **verified membership** (`id`) and reverse lookup; no ordering. For a
+  known-closed vocabulary, `id_unchecked` skips the membership comparison and is **faster than
+  `std::HashMap`** (see [Benchmarks](#benchmarks)). Use it as a fixed-vocabulary token↔id map on a hot path.
 
 Both assign dense ids in `[0, n)`, support reverse lookup, and **serialise to a flat blob**
 (`save`/`load`) — build once, persist, then `load`/mmap and query many times. Both are immutable after
@@ -97,17 +98,19 @@ machine-dependent; the **ratios** and the trade-off are the point.
 
 | structure | build | lookup | serialised |
 |---|---|---|---|
-| betula `StringIndex` (FST) | ~150 ms | ~390 ns | **27 B/key** |
-| betula `PerfectHashIndex` | ~350 ms | ~360 ns | **27 B/key** |
-| `std::HashMap<String, u32>` | ~200 ms | **~270 ns** | — (in-RAM, not serialisable) |
-| `std::BTreeMap<String, u32>` | ~22 ms | ~710 ns | — (in-RAM) |
+| betula `PerfectHashIndex::id_unchecked` | ~310 ms | **~232 ns** | 27 B/key |
+| `std::HashMap<String, u32>` | ~205 ms | ~290 ns | — (in-RAM, not serialisable) |
+| betula `PerfectHashIndex::id` (verified) | ~376 ms | ~377 ns | 27 B/key |
+| betula `StringIndex` (FST) | ~138 ms | ~386 ns | 27 B/key |
+| `std::BTreeMap<String, u32>` | ~39 ms | ~833 ns | — (in-RAM) |
 
-**Honest reading:** for *pure in-RAM exact lookup*, `HashMap` is fastest (~1.4×) — betula-index does
-**not** beat it on point-lookup latency, and you should use `HashMap` when that is all you need. The
-win is elsewhere: betula's indexes are **compact and serialisable / mmap-able** (one ~27 B/key blob
-covers *both* `string→id` and `id→string`; `save` it and `load`/mmap instead of rebuilding), and they
-answer **ordered, prefix, range, and fuzzy** queries the hash maps cannot. Reach for betula-index when
-the catalog is large, persisted, or queried by prefix / edit distance.
+**Honest reading:** for a **fixed / closed vocabulary**, `PerfectHashIndex::id_unchecked` is the
+**fastest** — ≈1.25× quicker than `HashMap` (no probing, no membership comparison) *and* compact +
+serialisable. Add membership verification (`id`) and you pay one extra cache line + a key comparison;
+use `StringIndex` and you trade more latency for **ordered / prefix / range / fuzzy** queries the hash
+maps cannot answer at all. So: `id_unchecked` for a known-closed token→id map on a hot path;
+`StringIndex` when order or fuzzy/prefix matters; `HashMap` when you just need a general in-RAM map with
+membership and nothing persisted.
 
 ## License
 

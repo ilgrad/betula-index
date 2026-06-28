@@ -106,6 +106,21 @@ impl PerfectHashIndex {
         }
     }
 
+    /// Dense id of `key` **without** verifying membership: `key` MUST be one of the built keys, or the
+    /// result is an arbitrary (but valid) slot in `[0, n)`. Skips the stored-key comparison that [`id`]
+    /// does, so it is the fastest possible lookup — use it for a **fixed/closed vocabulary** (the
+    /// canonical hot-path use of a perfect hash), where membership is already guaranteed. Returns `0`
+    /// for an empty dictionary.
+    ///
+    /// [`id`]: PerfectHashIndex::id
+    #[inline]
+    pub fn id_unchecked(&self, key: &str) -> u32 {
+        match &self.mph {
+            Some(mph) => mph.index(&hash_key(key)) as u32,
+            None => 0,
+        }
+    }
+
     /// Whether `key` is present.
     pub fn contains(&self, key: &str) -> bool {
         self.id(key).is_some()
@@ -194,6 +209,16 @@ mod tests {
         assert_eq!(idx.id("epsilon"), None); // absent → verified miss
         assert!(!idx.contains("epsilon"));
         assert_eq!(idx.key(99), None);
+    }
+
+    #[test]
+    fn id_unchecked_matches_id_for_members() {
+        let idx = PerfectHashIndex::build(["alpha", "beta", "gamma", "delta"]).unwrap();
+        for w in ["alpha", "beta", "gamma", "delta"] {
+            assert_eq!(idx.id_unchecked(w), idx.id(w).unwrap()); // same slot, no verification
+        }
+        let empty = PerfectHashIndex::build(Vec::<String>::new()).unwrap();
+        assert_eq!(empty.id_unchecked("x"), 0); // empty dictionary → 0
     }
 
     #[test]
