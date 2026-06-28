@@ -14,11 +14,14 @@ categories = ["data-structures", "text-processing"]
 # `levenshtein` adds the bounded edit-distance automaton (tiny `utf8-ranges` dep) for fuzzy search.
 fst = { version = "0.4", features = ["levenshtein"] }
 ptr_hash = { version = "1.1", optional = true }
+# epserde serialises the ptr_hash MPH for `PerfectHashIndex` persistence (already in the ptr_hash tree).
+epserde = { version = "0.8", optional = true }
 
 [features]
 default = ["mph"]
-# Minimal-perfect-hash dictionary (`PerfectHashIndex`), backed by the `ptr_hash` crate.
-mph = ["dep:ptr_hash"]
+# Minimal-perfect-hash dictionary (`PerfectHashIndex`), backed by the `ptr_hash` crate, with
+# epserde-based persistence (`save`/`load`).
+mph = ["dep:ptr_hash", "dep:epserde"]
 
 [profile.release]
 opt-level = 3

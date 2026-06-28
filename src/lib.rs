@@ -46,6 +46,9 @@ pub enum IndexError {
     /// A fuzzy/automaton query could not be compiled (e.g. the Levenshtein automaton for the given
     /// query and edit distance would be too large).
     Automaton(String),
+    /// (De)serialisation of a [`PerfectHashIndex`] blob failed (corrupt or incompatible MPH bytes).
+    #[cfg(feature = "mph")]
+    Serde(String),
 }
 
 impl fmt::Display for IndexError {
@@ -55,6 +58,8 @@ impl fmt::Display for IndexError {
             IndexError::Io(e) => write!(f, "io error: {e}"),
             IndexError::Format(m) => write!(f, "format error: {m}"),
             IndexError::Automaton(m) => write!(f, "automaton error: {m}"),
+            #[cfg(feature = "mph")]
+            IndexError::Serde(m) => write!(f, "serde error: {m}"),
         }
     }
 }
@@ -65,6 +70,8 @@ impl std::error::Error for IndexError {
             IndexError::Fst(e) => Some(e),
             IndexError::Io(e) => Some(e),
             IndexError::Format(_) | IndexError::Automaton(_) => None,
+            #[cfg(feature = "mph")]
+            IndexError::Serde(_) => None,
         }
     }
 }

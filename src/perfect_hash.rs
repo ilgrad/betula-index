@@ -11,14 +11,25 @@
 
 use crate::arena::StringArena;
 use crate::IndexError;
+use epserde::prelude::*;
 use ptr_hash::{DefaultPtrHash, PtrHash, PtrHashParams};
 
-/// Deterministic 64-bit hash of a string (fixed-seed `SipHash`, stable within a process).
+const MPH_MAGIC: &[u8; 4] = b"BMP1";
+
+/// Deterministic, **version-stable** 64-bit hash: FNV-1a over the bytes, then a splitmix64 finalizer
+/// for avalanche (so structured keys like `"key_0001"` still spread evenly across `ptr_hash`'s
+/// buckets). Stability across Rust versions and platforms is what lets a *serialised* MPH be reloaded
+/// and queried — `std`'s `DefaultHasher` is explicitly not guaranteed stable, so it cannot back
+/// persistence.
 fn hash_key(s: &str) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    s.hash(&mut h);
-    h.finish()
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325; // FNV-1a offset basis
+    for &b in s.as_bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3); // FNV-1a prime
+    }
+    h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9); // splitmix64 finalizer
+    h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    h ^ (h >> 31)
 }
 
 /// An immutable minimal-perfect-hash dictionary: fastest exact `string → dense id` with reverse lookup.
@@ -43,7 +54,7 @@ impl PerfectHashIndex {
         if n == 0 {
             return Ok(Self {
                 mph: None,
-                arena: StringArena::default(),
+                arena: StringArena::build(Vec::<&str>::new()), // offsets = [0]: a valid empty arena
                 n: 0,
             });
         }
@@ -104,6 +115,64 @@ impl PerfectHashIndex {
     pub fn key(&self, id: u32) -> Option<&str> {
         self.arena.get(id as usize)
     }
+
+    /// Serialise to a self-describing blob: `[magic 4][n u64][mph_len u64][mph epserde bytes][arena
+    /// bytes]`. The MPH is serialised with [`epserde`]; reloading queries correctly because
+    /// [`hash_key`] is version-stable.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, IndexError> {
+        let mut mph_buf = Vec::new();
+        if let Some(mph) = &self.mph {
+            mph.serialize(&mut mph_buf)
+                .map_err(|e| IndexError::Serde(e.to_string()))?;
+        }
+        let arena_buf = self.arena.to_bytes();
+        let mut out = Vec::with_capacity(20 + mph_buf.len() + arena_buf.len());
+        out.extend_from_slice(MPH_MAGIC);
+        out.extend_from_slice(&(self.n as u64).to_le_bytes());
+        out.extend_from_slice(&(mph_buf.len() as u64).to_le_bytes());
+        out.extend_from_slice(&mph_buf);
+        out.extend_from_slice(&arena_buf);
+        Ok(out)
+    }
+
+    /// Reconstruct from [`PerfectHashIndex::to_bytes`] output. Validates every length (safe on
+    /// untrusted input: it can fail, but never reads out of bounds).
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, IndexError> {
+        if bytes.len() < 20 || &bytes[0..4] != MPH_MAGIC {
+            return Err(IndexError::Format("bad magic or truncated header"));
+        }
+        let n = u64::from_le_bytes(bytes[4..12].try_into().unwrap()) as usize;
+        let mph_len = u64::from_le_bytes(bytes[12..20].try_into().unwrap()) as usize;
+        let mph_end = 20usize
+            .checked_add(mph_len)
+            .filter(|&e| e <= bytes.len())
+            .ok_or(IndexError::Format("mph length out of range"))?;
+        let mph = if n == 0 {
+            None
+        } else {
+            let mut reader = &bytes[20..mph_end];
+            Some(
+                DefaultPtrHash::deserialize_full(&mut reader)
+                    .map_err(|e| IndexError::Serde(e.to_string()))?,
+            )
+        };
+        let arena = StringArena::from_bytes(&bytes[mph_end..])?;
+        if arena.len() != n {
+            return Err(IndexError::Format("mph / arena length mismatch"));
+        }
+        Ok(Self { mph, arena, n })
+    }
+
+    /// Write the dictionary to `path` (see [`PerfectHashIndex::to_bytes`]).
+    pub fn save(&self, path: impl AsRef<std::path::Path>) -> Result<(), IndexError> {
+        std::fs::write(path, self.to_bytes()?)?;
+        Ok(())
+    }
+
+    /// Load a dictionary previously written with [`PerfectHashIndex::save`].
+    pub fn load(path: impl AsRef<std::path::Path>) -> Result<Self, IndexError> {
+        Self::from_bytes(&std::fs::read(path)?)
+    }
 }
 
 #[cfg(test)]
@@ -142,5 +211,46 @@ mod tests {
         assert!(idx.is_empty());
         assert_eq!(idx.id("x"), None);
         assert_eq!(idx.key(0), None);
+    }
+
+    #[test]
+    fn round_trips_through_bytes() {
+        let idx = PerfectHashIndex::build(["alpha", "beta", "gamma", "delta"]).unwrap();
+        let restored = PerfectHashIndex::from_bytes(&idx.to_bytes().unwrap()).unwrap();
+        assert_eq!(restored.len(), idx.len());
+        for w in ["alpha", "beta", "gamma", "delta"] {
+            // the serialised MPH yields the same slot, and reverse lookup matches
+            assert_eq!(restored.id(w), idx.id(w));
+            assert_eq!(restored.key(idx.id(w).unwrap()), Some(w));
+        }
+        assert_eq!(restored.id("zeta"), None); // verified membership survives the round-trip
+    }
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let idx = PerfectHashIndex::build(["GET", "POST", "PUT", "DELETE"]).unwrap();
+        let path = std::env::temp_dir().join(format!("betula_mph_{}.bmp", std::process::id()));
+        idx.save(&path).unwrap();
+        let loaded = PerfectHashIndex::load(&path).unwrap();
+        for w in ["GET", "POST", "PUT", "DELETE"] {
+            assert_eq!(loaded.id(w), idx.id(w));
+        }
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn empty_round_trips_and_rejects_corrupt() {
+        let empty = PerfectHashIndex::build(Vec::<String>::new()).unwrap();
+        let restored = PerfectHashIndex::from_bytes(&empty.to_bytes().unwrap()).unwrap();
+        assert!(restored.is_empty());
+        assert_eq!(restored.id("x"), None);
+
+        assert!(PerfectHashIndex::from_bytes(b"nope").is_err());
+        let mut good = PerfectHashIndex::build(["a", "b"])
+            .unwrap()
+            .to_bytes()
+            .unwrap();
+        good[0] = b'X'; // break the magic
+        assert!(PerfectHashIndex::from_bytes(&good).is_err());
     }
 }

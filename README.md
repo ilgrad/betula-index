@@ -17,8 +17,9 @@ Two complementary, build-once / query-many structures:
   `string → dense id` lookup with **verified membership** and reverse lookup; no ordering. Use it as a
   fixed-vocabulary token↔id map on a hot path.
 
-Both assign dense ids in `[0, n)` and support reverse lookup. Both are immutable after building — they
-are immutable summaries, like the clustering features in `betula-cluster`.
+Both assign dense ids in `[0, n)`, support reverse lookup, and **serialise to a flat blob**
+(`save`/`load`) — build once, persist, then `load`/mmap and query many times. Both are immutable after
+building, like the clustering features in `betula-cluster`.
 
 ## Install
 
@@ -63,6 +64,11 @@ let dict = PerfectHashIndex::build(["GET", "POST", "PUT", "DELETE"])?;
 let id = dict.id("POST").unwrap();             // fastest exact lookup, dense id in [0, n)
 assert_eq!(dict.key(id), Some("POST"));
 assert_eq!(dict.id("PATCH"), None);            // membership is verified, not just hashed
+
+// persist the MPH and reload it (the dense ids are preserved across save/load)
+dict.save("verbs.bmp")?;
+let dict = PerfectHashIndex::load("verbs.bmp")?;
+assert_eq!(dict.id("POST"), Some(id));
 # Ok::<(), betula_index::IndexError>(())
 ```
 
@@ -75,7 +81,10 @@ assert_eq!(dict.id("PATCH"), None);            // membership is verified, not ju
 - **`PerfectHashIndex`** keys the MPH on a deterministic 64-bit hash of each string (so queries take
   `&str` without allocating), then verifies the hit against the stored key — an MPH returns a slot for
   *any* input, so verification is what turns it into a real membership test. Build fails (rather than
-  silently corrupting) on the astronomically rare 64-bit hash collision between two distinct keys.
+  silently corrupting) on the astronomically rare 64-bit hash collision between two distinct keys. The
+  hash is **version-stable** (FNV-1a + a splitmix64 finalizer, not `std`'s `DefaultHasher`), so a
+  `save`d MPH (the `ptr_hash` structure serialised via [`epserde`](https://crates.io/crates/epserde),
+  alongside the arena) reloads and queries identically on any build — the precondition for persistence.
 - `mph` is opt-in-by-default: with `--no-default-features` the crate depends only on `fst`. Enabling
   `mph` pulls `ptr_hash` and its dependency tree, which currently carries a few informational RustSec
   advisories (unmaintained / unsound) on transitive crates — `cargo audit` reports them as warnings,
